@@ -51,23 +51,38 @@ function App() {
   }, []);
 
   useEffect(() => {
+    let isInitialized = false;
+    let timeoutId;
+
+    // Timeout de segurança para evitar carregamento infinito
+    timeoutId = setTimeout(() => {
+      console.warn('Timeout de autenticação - finalizando carregamento');
+      setLoading(false);
+    }, 10000); // 10 segundos
+
     const handleSession = async (session) => {
       if (session) {
         setIsAuthenticated(true);
         setUser(session.user);
         console.log('Sessão encontrada, buscando perfil...');
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', session.user.id)
-          .single();
+        
+        try {
+          const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', session.user.id)
+            .single();
 
-        if (profileError) {
-          console.error("Erro ao buscar role do usuário:", profileError);
+          if (profileError) {
+            console.error("Erro ao buscar role do usuário:", profileError);
+            setUserRole(null);
+          } else if (profile) {
+            console.log("Role do usuário encontrado:", profile.role);
+            setUserRole(profile.role);
+          }
+        } catch (error) {
+          console.error("Erro na busca do perfil:", error);
           setUserRole(null);
-        } else if (profile) {
-          console.log("Role do usuário encontrado:", profile.role);
-          setUserRole(profile.role);
         }
       } else {
         setIsAuthenticated(false);
@@ -76,29 +91,30 @@ function App() {
         setCurrentView('home');
         localStorage.removeItem('planVitalidad_currentView');
       }
-      setLoading(false); // Finaliza o carregamento após a verificação completa
+      
+      clearTimeout(timeoutId);
+      setLoading(false);
     };
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('onAuthStateChange: Evento disparado:', event);
+      
+      // Evitar processar INITIAL_SESSION se já inicializamos
+      if (event === 'INITIAL_SESSION' && isInitialized) {
+        return;
+      }
+      
       if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
+        isInitialized = true;
         await handleSession(session);
       } else if (event === 'SIGNED_OUT') {
         await handleSession(null);
       }
     });
 
-    // Initial check
-    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
-      console.log('getSession: Verificação inicial de sessão.');
-      if (error) {
-        console.error('getSession: Erro ao obter sessão:', error);
-      }
-      await handleSession(session);
-    });
-
     return () => {
       authListener.subscription.unsubscribe();
+      clearTimeout(timeoutId);
     };
   }, []);
 
@@ -139,6 +155,7 @@ function App() {
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
             <p className="text-green-700 text-xl">Carregando...</p>
+            <p className="text-green-500 text-sm mt-2">Verificando autenticação...</p>
           </div>
         </div>
       );

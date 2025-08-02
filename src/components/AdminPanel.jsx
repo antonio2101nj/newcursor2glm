@@ -28,26 +28,67 @@ function AdminPanel({ onBack }) {
   const [loadingRole, setLoadingRole] = useState(true);
 
   useEffect(() => {
-    const fetchUserRole = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: profile, error } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .single();
+    let isMounted = true;
+    let timeoutId;
 
-        if (error) {
-          console.error('Error fetching user role:', error);
-        } else if (profile) {
-          setUserRole(profile.role);
+    // Timeout de segurança para evitar carregamento infinito
+    timeoutId = setTimeout(() => {
+      console.warn('Timeout no AdminPanel - finalizando carregamento');
+      if (isMounted) {
+        setLoadingRole(false);
+      }
+    }, 8000); // 8 segundos
+
+    const fetchUserRole = async () => {
+      try {
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        
+        if (userError) {
+          console.error('Error fetching user:', userError);
+          if (isMounted) {
+            clearTimeout(timeoutId);
+            setLoadingRole(false);
+          }
+          return;
+        }
+
+        if (user && isMounted) {
+          const { data: profile, error } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', user.id)
+            .single();
+
+          if (isMounted) {
+            clearTimeout(timeoutId);
+            if (error) {
+              console.error('Error fetching user role:', error);
+              setUserRole(null);
+            } else if (profile) {
+              setUserRole(profile.role);
+            }
+            setLoadingRole(false);
+          }
+        } else if (isMounted) {
+          clearTimeout(timeoutId);
+          setLoadingRole(false);
+        }
+      } catch (error) {
+        console.error('Error in fetchUserRole:', error);
+        if (isMounted) {
+          clearTimeout(timeoutId);
+          setLoadingRole(false);
         }
       }
-      setLoadingRole(false);
     };
 
     fetchUserRole();
     loadContents();
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timeoutId);
+    };
   }, []);
 
   const loadContents = async () => {
@@ -196,8 +237,12 @@ function AdminPanel({ onBack }) {
 
   if (loadingRole) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
-        <p className="text-green-600 text-lg">Carregando painel administrativo...</p>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-green-100">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
+          <p className="text-green-700 text-xl">Carregando painel administrativo...</p>
+          <p className="text-green-500 text-sm mt-2">Verificando permissões...</p>
+        </div>
       </div>
     );
   }
