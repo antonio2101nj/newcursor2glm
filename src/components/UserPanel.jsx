@@ -52,30 +52,71 @@ function UserPanel({ onBack }) {
   }, []); // Dependências vazias para useCallback
 
   useEffect(() => {
-    const fetchUserAndContents = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: profile, error } = await supabase
-          .from('profiles')
-          .select('role, is_premium')
-          .eq('id', user.id)
-          .single();
+    let isMounted = true;
+    let timeoutId;
 
-        if (error) {
-          console.error('Error fetching user profile:', error);
-        } else if (profile) {
-          setUserRole(profile.role);
-          setIsPremium(profile.is_premium);
-          loadContents(user.id, profile.role, profile.is_premium); // Chamar loadContents aqui
-        }
-      } else {
-        loadContents(null, null, false); // Carregar conteúdo para usuário não logado
+    // Timeout de segurança para evitar carregamento infinito
+    timeoutId = setTimeout(() => {
+      console.warn('Timeout no UserPanel - finalizando carregamento');
+      if (isMounted) {
+        setLoadingRole(false);
       }
-      setLoadingRole(false);
+    }, 8000); // 8 segundos
+
+    const fetchUserAndContents = async () => {
+      try {
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        
+        if (userError) {
+          console.error('Error fetching user:', userError);
+          if (isMounted) {
+            clearTimeout(timeoutId);
+            setLoadingRole(false);
+          }
+          return;
+        }
+
+        if (user && isMounted) {
+          const { data: profile, error } = await supabase
+            .from('profiles')
+            .select('role, is_premium')
+            .eq('id', user.id)
+            .single();
+
+          if (isMounted) {
+            clearTimeout(timeoutId);
+            if (error) {
+              console.error('Error fetching user profile:', error);
+              loadContents(null, null, false); // Fallback para usuário não logado
+            } else if (profile) {
+              setUserRole(profile.role);
+              setIsPremium(profile.is_premium);
+              loadContents(user.id, profile.role, profile.is_premium);
+            }
+            setLoadingRole(false);
+          }
+        } else if (isMounted) {
+          clearTimeout(timeoutId);
+          loadContents(null, null, false); // Carregar conteúdo para usuário não logado
+          setLoadingRole(false);
+        }
+      } catch (error) {
+        console.error('Error in fetchUserAndContents:', error);
+        if (isMounted) {
+          clearTimeout(timeoutId);
+          loadContents(null, null, false);
+          setLoadingRole(false);
+        }
+      }
     };
 
     fetchUserAndContents();
-  }, []); // Remover loadContents das dependências para evitar loop infinito
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timeoutId);
+    };
+  }, []); // loadContents é useCallback com deps vazias, então é seguro
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
@@ -120,8 +161,12 @@ function UserPanel({ onBack }) {
 
   if (loadingRole) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
-        <p className="text-green-600 text-lg">Carregando painel do usuário...</p>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-green-100">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
+          <p className="text-green-700 text-xl">Carregando painel do usuário...</p>
+          <p className="text-green-500 text-sm mt-2">Verificando permissões...</p>
+        </div>
       </div>
     );
   }
