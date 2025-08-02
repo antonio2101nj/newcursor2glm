@@ -11,12 +11,44 @@ import { LanguageProvider } from './contexts/LanguageContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 
 function App() {
-  const [currentView, setCurrentView] = useState('home');
+  const [currentView, setCurrentView] = useState(() => {
+    // Recuperar view do localStorage ou URL
+    const savedView = localStorage.getItem('planVitalidad_currentView');
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlView = urlParams.get('view');
+    return urlView || savedView || 'home';
+  });
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authMode, setAuthMode] = useState('login');
   const [user, setUser] = useState(null);
   const [userRole, setUserRole] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // Salvar view atual no localStorage e URL
+  useEffect(() => {
+    localStorage.setItem('planVitalidad_currentView', currentView);
+    
+    // Atualizar URL sem recarregar a página
+    const url = new URL(window.location);
+    if (currentView === 'home') {
+      url.searchParams.delete('view');
+    } else {
+      url.searchParams.set('view', currentView);
+    }
+    window.history.replaceState({}, '', url);
+  }, [currentView]);
+
+  // Escutar mudanças na URL (botão voltar do navegador)
+  useEffect(() => {
+    const handlePopState = () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlView = urlParams.get('view') || 'home';
+      setCurrentView(urlView);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   useEffect(() => {
     const handleSession = async (session) => {
@@ -41,7 +73,8 @@ function App() {
         setIsAuthenticated(false);
         setUser(null);
         setUserRole(null);
-        setCurrentView('home'); // Reset view on logout
+        setCurrentView('home');
+        localStorage.removeItem('planVitalidad_currentView');
       }
       setLoading(false); // Finaliza o carregamento após a verificação completa
     };
@@ -83,7 +116,16 @@ function App() {
       setUser(null);
       setUserRole(null);
       setCurrentView('home');
+      localStorage.removeItem('planVitalidad_currentView');
     }
+  };
+
+  const handleViewChange = (view) => {
+    setCurrentView(view);
+  };
+
+  const handleBackToHome = () => {
+    setCurrentView('home');
   };
 
   const renderAuthForm = () => {
@@ -92,13 +134,25 @@ function App() {
 
   const renderMainApp = () => {
     if (loading) {
-      return <div className="min-h-screen flex items-center justify-center text-green-700 text-2xl">Carregando...</div>; // Tela de carregamento
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-green-100">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
+            <p className="text-green-700 text-xl">Carregando...</p>
+          </div>
+        </div>
+      );
+    }
+
+    // Se não estiver autenticado, sempre mostrar tela de login
+    if (!isAuthenticated) {
+      return renderAuthForm();
     }
 
     if (currentView === 'admin') {
-      return <AdminPanel user={user} userRole={userRole} onBack={() => setCurrentView('home')} />;
+      return <AdminPanel user={user} userRole={userRole} onBack={handleBackToHome} />;
     } else if (currentView === 'user') {
-      return <UserPanel user={user} userRole={userRole} onBack={() => setCurrentView('home')} />;
+      return <UserPanel user={user} userRole={userRole} onBack={handleBackToHome} />;
     } else {
       return (
         <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-100 flex flex-col items-center justify-center p-4">
@@ -114,7 +168,7 @@ function App() {
 
             <div className="grid md:grid-cols-2 gap-6">
               {userRole === 'admin' && (
-                <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => setCurrentView('admin')}>
+                <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => handleViewChange('admin')}>
                   <CardHeader className="text-center">
                     <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
                       <Settings className="w-8 h-8 text-green-600" />
@@ -125,14 +179,14 @@ function App() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <Button className="w-full bg-green-600 hover:bg-green-700" onClick={() => setCurrentView('admin')}>
+                    <Button className="w-full bg-green-600 hover:bg-green-700" onClick={() => handleViewChange('admin')}>
                       Acessar Painel Admin
                     </Button>
                   </CardContent>
                 </Card>
               )}
 
-              <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => setCurrentView('user')}>
+              <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => handleViewChange('user')}>
                 <CardHeader className="text-center">
                   <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
                     <Users className="w-8 h-8 text-green-600" />
@@ -143,7 +197,7 @@ function App() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <Button className="w-full bg-green-600 hover:bg-green-700" onClick={() => setCurrentView('user')}>
+                  <Button className="w-full bg-green-600 hover:bg-green-700" onClick={() => handleViewChange('user')}>
                     Acessar Painel Usuário
                   </Button>
                 </CardContent>
@@ -172,12 +226,10 @@ function App() {
   return (
     <ThemeProvider>
       <LanguageProvider>
-        {isAuthenticated ? renderMainApp() : renderAuthForm()}
+        {renderMainApp()}
       </LanguageProvider>
     </ThemeProvider>
   );
 }
 
 export default App;
-
-
