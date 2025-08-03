@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Button } from './ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { ArrowLeft, FileText, Image, Video, FileIcon, Eye, LogOut, Settings } from 'lucide-react'
@@ -9,13 +10,13 @@ import LanguageSelector from './LanguageSelector'
 import ThemeToggle from './ThemeToggle'
 import { useTranslation } from '../hooks/useTranslation'
 
-function UserPanel({ onBack }) {
+function UserPanel({ user, userRole: propUserRole }) {
+  const navigate = useNavigate();
   const [contents, setContents] = useState([])
   const [selectedContent, setSelectedContent] = useState(null)
   const [activeTab, setActiveTab] = useState('all')
-  const [userRole, setUserRole] = useState(null);
   const [isPremium, setIsPremium] = useState(false);
-  const [loadingRole, setLoadingRole] = useState(true);
+  const [loadingRole, setLoadingRole] = useState(!propUserRole);
 
   const { t } = useTranslation()
 
@@ -52,79 +53,45 @@ function UserPanel({ onBack }) {
   }, []); // Dependências vazias para useCallback
 
   useEffect(() => {
-    let isMounted = true;
-    let timeoutId;
-
-    // Timeout de segurança para evitar carregamento infinito
-    timeoutId = setTimeout(() => {
-      console.warn('Timeout no UserPanel - finalizando carregamento');
-      if (isMounted) {
-        setLoadingRole(false);
-      }
-    }, 8000); // 8 segundos
-
-    const fetchUserAndContents = async () => {
-      try {
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
-        
-        if (userError) {
-          console.error('Error fetching user:', userError);
-          if (isMounted) {
-            clearTimeout(timeoutId);
-            setLoadingRole(false);
-          }
-          return;
-        }
-
-        if (user && isMounted) {
+    if (propUserRole && user) {
+      // Buscar is_premium se não temos essa informação
+      const fetchPremiumStatus = async () => {
+        try {
           const { data: profile, error } = await supabase
             .from('profiles')
-            .select('role, is_premium')
+            .select('is_premium')
             .eq('id', user.id)
             .single();
 
-          if (isMounted) {
-            clearTimeout(timeoutId);
-            if (error) {
-              console.error('Error fetching user profile:', error);
-              loadContents(null, null, false); // Fallback para usuário não logado
-            } else if (profile) {
-              setUserRole(profile.role);
-              setIsPremium(profile.is_premium);
-              loadContents(user.id, profile.role, profile.is_premium);
-            }
-            setLoadingRole(false);
+          if (!error && profile) {
+            setIsPremium(profile.is_premium);
+            loadContents(user.id, propUserRole, profile.is_premium);
+          } else {
+            loadContents(user.id, propUserRole, false);
           }
-        } else if (isMounted) {
-          clearTimeout(timeoutId);
-          loadContents(null, null, false); // Carregar conteúdo para usuário não logado
-          setLoadingRole(false);
+        } catch (error) {
+          console.error('Error fetching premium status:', error);
+          loadContents(user.id, propUserRole, false);
         }
-      } catch (error) {
-        console.error('Error in fetchUserAndContents:', error);
-        if (isMounted) {
-          clearTimeout(timeoutId);
-          loadContents(null, null, false);
-          setLoadingRole(false);
-        }
-      }
-    };
+        setLoadingRole(false);
+      };
 
-    fetchUserAndContents();
-
-    return () => {
-      isMounted = false;
-      clearTimeout(timeoutId);
-    };
-  }, []); // loadContents é useCallback com deps vazias, então é seguro
+      fetchPremiumStatus();
+    } else if (user) {
+      loadContents(user.id, propUserRole || null, false);
+      setLoadingRole(false);
+    } else {
+      loadContents(null, null, false);
+      setLoadingRole(false);
+    }
+  }, [propUserRole, user, loadContents]);
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) {
       console.error('Error logging out:', error.message);
-    } else {
-      onBack(); // Volta para a tela de login/home
     }
+    // O onAuthStateChange no App.jsx irá redirecionar para /auth
   };
 
   const getTypeIcon = (type) => {
@@ -185,12 +152,10 @@ function UserPanel({ onBack }) {
       <div className="max-w-6xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center">
-            <LogoutConfirmDialog onConfirm={onBack}>
-              <Button variant="outline" className="mr-4">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                {t('userPanel.back')}
-              </Button>
-            </LogoutConfirmDialog>
+            <Button variant="outline" onClick={() => navigate('/')} className="mr-4">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              {t('userPanel.back')}
+            </Button>
             <div>
               <h1 className="text-3xl font-bold text-green-800 dark:text-green-400">{t('userPanel.title')}</h1>
               <p className="text-green-600 dark:text-green-300">{t('userPanel.subtitle')}</p>
@@ -199,6 +164,13 @@ function UserPanel({ onBack }) {
           <div className="flex items-center gap-2">
             <ThemeToggle />
             <LanguageSelector />
+            <LogoutConfirmDialog onConfirm={handleLogout}>
+              <Button
+                className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+              >
+                <LogOut className="mr-2 h-4 w-4" /> Sair
+              </Button>
+            </LogoutConfirmDialog>
           </div>
         </div>
 

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
 
-const AuthForm = ({ type, onLoginSuccess, onAuthSuccess }) => {
+const AuthForm = ({ onAuthSuccess }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -9,6 +9,7 @@ const AuthForm = ({ type, onLoginSuccess, onAuthSuccess }) => {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [authMode, setAuthMode] = useState('login');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -17,18 +18,18 @@ const AuthForm = ({ type, onLoginSuccess, onAuthSuccess }) => {
     setLoading(true);
 
     try {
-      if (type === 'login') {
+      if (authMode === 'login') {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
         setMessage('Login bem-sucedido!');
         onAuthSuccess();
-      } else if (type === 'register') {
+      } else if (authMode === 'register') {
         const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: fullName } } });
         if (error) throw error;
         setMessage('Cadastro bem-sucedido! Verifique seu email para confirmar.');
         // No caso de auto-confirm, podemos chamar onAuthSuccess aqui também
         onAuthSuccess();
-      } else if (type === 'reset') {
+      } else if (authMode === 'reset') {
         const { error } = await supabase.auth.resetPasswordForEmail(email);
         if (error) throw error;
         setMessage('Link de recuperação de senha enviado para seu email.');
@@ -44,12 +45,12 @@ const AuthForm = ({ type, onLoginSuccess, onAuthSuccess }) => {
     <div className="min-h-screen flex items-center justify-center bg-gray-100">
       <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
         <h2 className="text-2xl font-bold text-center mb-6 text-green-600">
-          {type === 'login' && 'Login'}
-          {type === 'register' && 'Cadastre-se'}
-          {type === 'reset' && 'Recuperar Senha'}
+          {authMode === 'login' && 'Login'}
+          {authMode === 'register' && 'Cadastre-se'}
+          {authMode === 'reset' && 'Recuperar Senha'}
         </h2>
         <form onSubmit={handleSubmit}>
-          {type === 'register' && (
+          {authMode === 'register' && (
             <div className="mb-4">
               <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="fullName">
                 Nome Completo
@@ -79,7 +80,7 @@ const AuthForm = ({ type, onLoginSuccess, onAuthSuccess }) => {
               required
             />
           </div>
-          {(type === 'login' || type === 'register') && (
+          {(authMode === 'login' || authMode === 'register') && (
             <div className="mb-6">
               <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="password">
                 Senha
@@ -111,8 +112,8 @@ const AuthForm = ({ type, onLoginSuccess, onAuthSuccess }) => {
               disabled={loading}
             >
               {loading ? 'Carregando...' : (
-                type === 'login' ? 'Entrar' :
-                type === 'register' ? 'Cadastrar' :
+                authMode === 'login' ? 'Entrar' :
+                authMode === 'register' ? 'Cadastrar' :
                 'Enviar Link de Recuperação'
               )}
             </button>
@@ -121,12 +122,12 @@ const AuthForm = ({ type, onLoginSuccess, onAuthSuccess }) => {
           {error && <p className="text-center text-sm mt-4 text-red-500">{error}</p>}
         </form>
 
-        {type === 'login' && (
+        {authMode === 'login' && (
           <div className="mt-4 text-center">
             <a
               href="#"
               className="inline-block align-baseline font-bold text-sm text-green-500 hover:text-green-800"
-              onClick={() => onLoginSuccess('reset')}
+              onClick={(e) => { e.preventDefault(); setAuthMode('reset'); }}
             >
               Esqueceu a senha?
             </a>
@@ -135,7 +136,7 @@ const AuthForm = ({ type, onLoginSuccess, onAuthSuccess }) => {
               <a
                 href="#"
                 className="font-bold text-green-500 hover:text-green-800"
-                onClick={() => onLoginSuccess('register')}
+                onClick={(e) => { e.preventDefault(); setAuthMode('register'); }}
               >
                 Cadastre-se
               </a>
@@ -143,12 +144,12 @@ const AuthForm = ({ type, onLoginSuccess, onAuthSuccess }) => {
           </div>
         )}
 
-        {(type === 'register' || type === 'reset') && (
+        {(authMode === 'register' || authMode === 'reset') && (
           <div className="mt-4 text-center">
             <a
               href="#"
               className="inline-block align-baseline font-bold text-sm text-green-500 hover:text-green-800"
-              onClick={() => onLoginSuccess('login')}
+              onClick={(e) => { e.preventDefault(); setAuthMode('login'); }}
             >
               Voltar para o Login
             </a>

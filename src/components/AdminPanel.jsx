@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Button } from './ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { Input } from './ui/input'
@@ -9,7 +10,8 @@ import { ArrowLeft, Upload, FileText, Image, Video, FileIcon, Trash2, LogOut } f
 import { supabase } from '../lib/supabase'
 import LogoutConfirmDialog from './LogoutConfirmDialog'
 
-function AdminPanel({ onBack }) {
+function AdminPanel({ user, userRole: propUserRole }) {
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -24,72 +26,14 @@ function AdminPanel({ onBack }) {
   const [isUploading, setIsUploading] = useState(false)
   const [uploadMessage, setUploadMessage] = useState('')
   const [contents, setContents] = useState([])
-  const [userRole, setUserRole] = useState(null);
-  const [loadingRole, setLoadingRole] = useState(true);
+  const [loadingRole, setLoadingRole] = useState(!propUserRole);
 
   useEffect(() => {
-    let isMounted = true;
-    let timeoutId;
-
-    // Timeout de segurança para evitar carregamento infinito
-    timeoutId = setTimeout(() => {
-      console.warn('Timeout no AdminPanel - finalizando carregamento');
-      if (isMounted) {
-        setLoadingRole(false);
-      }
-    }, 8000); // 8 segundos
-
-    const fetchUserRole = async () => {
-      try {
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
-        
-        if (userError) {
-          console.error('Error fetching user:', userError);
-          if (isMounted) {
-            clearTimeout(timeoutId);
-            setLoadingRole(false);
-          }
-          return;
-        }
-
-        if (user && isMounted) {
-          const { data: profile, error } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', user.id)
-            .single();
-
-          if (isMounted) {
-            clearTimeout(timeoutId);
-            if (error) {
-              console.error('Error fetching user role:', error);
-              setUserRole(null);
-            } else if (profile) {
-              setUserRole(profile.role);
-            }
-            setLoadingRole(false);
-          }
-        } else if (isMounted) {
-          clearTimeout(timeoutId);
-          setLoadingRole(false);
-        }
-      } catch (error) {
-        console.error('Error in fetchUserRole:', error);
-        if (isMounted) {
-          clearTimeout(timeoutId);
-          setLoadingRole(false);
-        }
-      }
-    };
-
-    fetchUserRole();
+    if (propUserRole) {
+      setLoadingRole(false);
+    }
     loadContents();
-
-    return () => {
-      isMounted = false;
-      clearTimeout(timeoutId);
-    };
-  }, []);
+  }, [propUserRole]);
 
   const loadContents = async () => {
     try {
@@ -247,15 +191,15 @@ function AdminPanel({ onBack }) {
     );
   }
 
-  if (userRole !== 'admin') {
+  if (propUserRole !== 'admin') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-red-100 text-red-800 p-4">
         <h2 className="text-2xl font-bold mb-4">Acesso Negado</h2>
         <p className="text-lg text-center">Você não tem permissão para acessar o painel administrativo.</p>
-        <Button variant="outline" onClick={onBack} className="mt-6">
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Voltar para a tela inicial
-        </Button>
+                  <Button variant="outline" onClick={() => navigate('/')} className="mt-6">
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Voltar para a tela inicial
+          </Button>
       </div>
     );
   }
@@ -265,13 +209,13 @@ function AdminPanel({ onBack }) {
       <div className="max-w-6xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center">
-            <Button variant="outline" onClick={onBack} className="mr-4">
+            <Button variant="outline" onClick={() => navigate('/')} className="mr-4">
               <ArrowLeft className="w-4 h-4 mr-2" />
               Voltar
             </Button>
             <h1 className="text-3xl font-bold text-green-800">Painel Administrativo</h1>
           </div>
-          <LogoutConfirmDialog onConfirm={onBack}>
+          <LogoutConfirmDialog onConfirm={() => navigate('/auth')}>
             <Button
               className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
             >
