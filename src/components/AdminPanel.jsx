@@ -28,7 +28,7 @@ function AdminPanel({ onBack }) {
   const [loadingRole, setLoadingRole] = useState(true);
 
   useEffect(() => {
-    const fetchUserRole = async () => {
+    const fetchUserRoleAndContents = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         const { data: profile, error } = await supabase
@@ -44,10 +44,12 @@ function AdminPanel({ onBack }) {
         }
       }
       setLoadingRole(false);
+      
+      // Carregar conteúdos independentemente do user role
+      await loadContents();
     };
 
-    fetchUserRole();
-    loadContents();
+    fetchUserRoleAndContents();
   }, []);
 
   const loadContents = async () => {

@@ -51,23 +51,31 @@ function App() {
   }, []);
 
   useEffect(() => {
+    let isInitialized = false;
+
     const handleSession = async (session) => {
       if (session) {
         setIsAuthenticated(true);
         setUser(session.user);
         console.log('Sessão encontrada, buscando perfil...');
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', session.user.id)
-          .single();
+        
+        try {
+          const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', session.user.id)
+            .single();
 
-        if (profileError) {
-          console.error("Erro ao buscar role do usuário:", profileError);
+          if (profileError) {
+            console.error("Erro ao buscar role do usuário:", profileError);
+            setUserRole(null);
+          } else if (profile) {
+            console.log("Role do usuário encontrado:", profile.role);
+            setUserRole(profile.role);
+          }
+        } catch (error) {
+          console.error("Erro inesperado ao buscar perfil:", error);
           setUserRole(null);
-        } else if (profile) {
-          console.log("Role do usuário encontrado:", profile.role);
-          setUserRole(profile.role);
         }
       } else {
         setIsAuthenticated(false);
@@ -81,21 +89,43 @@ function App() {
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('onAuthStateChange: Evento disparado:', event);
+      
+      // Evitar processamento duplo na inicialização
+      if (event === 'INITIAL_SESSION' && isInitialized) {
+        return;
+      }
+      
       if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
         await handleSession(session);
+        if (event === 'INITIAL_SESSION') {
+          isInitialized = true;
+        }
       } else if (event === 'SIGNED_OUT') {
         await handleSession(null);
       }
     });
 
-    // Initial check
-    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
-      console.log('getSession: Verificação inicial de sessão.');
-      if (error) {
-        console.error('getSession: Erro ao obter sessão:', error);
+    // Initial check apenas se não foi inicializado via listener
+    const initializeAuth = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        console.log('getSession: Verificação inicial de sessão.');
+        if (error) {
+          console.error('getSession: Erro ao obter sessão:', error);
+        }
+        
+        // Só processa se o listener ainda não inicializou
+        if (!isInitialized) {
+          await handleSession(session);
+          isInitialized = true;
+        }
+      } catch (error) {
+        console.error('Erro na inicialização da autenticação:', error);
+        setLoading(false);
       }
-      await handleSession(session);
-    });
+    };
+
+    initializeAuth();
 
     return () => {
       authListener.subscription.unsubscribe();
