@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Button } from './ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { ArrowLeft, FileText, Image, Video, FileIcon, Eye, LogOut, Settings } from 'lucide-react'
@@ -19,37 +19,7 @@ function UserPanel({ onBack }) {
 
   const { t } = useTranslation()
 
-  const loadContents = useCallback(async (userId, currentUserRole, currentUserIsPremium) => {
-    try {
-      let query = supabase.from('content').select('*').order('created_at', { ascending: false });
 
-      // Filtro para conteúdo premium/não premium
-      if (currentUserRole !== 'admin') {
-        query = query.or(`is_premium.eq.false,is_premium.eq.${currentUserIsPremium}`);
-      }
-
-      // Filtro para conteúdo bloqueado por data
-      query = query.lte('release_date', new Date().toISOString());
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-
-      // Filtrar conteúdo com unlock_days
-      const filteredByUnlock = data.filter(content => {
-        if (content.is_locked && content.unlock_days > 0) {
-          const createdAt = new Date(content.created_at);
-          const unlockDate = new Date(createdAt.setDate(createdAt.getDate() + content.unlock_days));
-          return new Date() >= unlockDate;
-        }
-        return true;
-      });
-
-      setContents(filteredByUnlock || []);
-    } catch (error) {
-      console.error('Erro ao carregar conteúdos:', error);
-    }
-  }, []); // Dependências vazias para useCallback
 
   useEffect(() => {
     const fetchUserAndContents = async () => {
@@ -66,16 +36,69 @@ function UserPanel({ onBack }) {
         } else if (profile) {
           setUserRole(profile.role);
           setIsPremium(profile.is_premium);
-          loadContents(user.id, profile.role, profile.is_premium); // Chamar loadContents aqui
+          
+          // Chamar loadContents diretamente aqui em vez de usar o callback
+          try {
+            let query = supabase.from('content').select('*').order('created_at', { ascending: false });
+
+            // Filtro para conteúdo premium/não premium
+            if (profile.role !== 'admin') {
+              query = query.or(`is_premium.eq.false,is_premium.eq.${profile.is_premium}`);
+            }
+
+            // Filtro para conteúdo bloqueado por data
+            query = query.lte('release_date', new Date().toISOString());
+
+            const { data, error: contentError } = await query;
+
+            if (contentError) throw contentError;
+
+            // Filtrar conteúdo com unlock_days
+            const filteredByUnlock = data.filter(content => {
+              if (content.is_locked && content.unlock_days > 0) {
+                const createdAt = new Date(content.created_at);
+                const unlockDate = new Date(createdAt.setDate(createdAt.getDate() + content.unlock_days));
+                return new Date() >= unlockDate;
+              }
+              return true;
+            });
+
+            setContents(filteredByUnlock || []);
+          } catch (error) {
+            console.error('Erro ao carregar conteúdos:', error);
+          }
         }
       } else {
-        loadContents(null, null, false); // Carregar conteúdo para usuário não logado
+        // Carregar conteúdo para usuário não logado
+        try {
+          let query = supabase.from('content').select('*').order('created_at', { ascending: false });
+          query = query.eq('is_premium', false);
+          query = query.lte('release_date', new Date().toISOString());
+
+          const { data, error: contentError } = await query;
+
+          if (contentError) throw contentError;
+
+          // Filtrar conteúdo com unlock_days
+          const filteredByUnlock = data.filter(content => {
+            if (content.is_locked && content.unlock_days > 0) {
+              const createdAt = new Date(content.created_at);
+              const unlockDate = new Date(createdAt.setDate(createdAt.getDate() + content.unlock_days));
+              return new Date() >= unlockDate;
+            }
+            return true;
+          });
+
+          setContents(filteredByUnlock || []);
+        } catch (error) {
+          console.error('Erro ao carregar conteúdos:', error);
+        }
       }
       setLoadingRole(false);
     };
 
     fetchUserAndContents();
-  }, []); // Remover loadContents das dependências para evitar loop infinito
+  }, []); // Array de dependências vazio para executar apenas uma vez
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
